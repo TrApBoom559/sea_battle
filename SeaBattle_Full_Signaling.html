@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Морской бой — P2P QR (чат + уведомления + фикс старта)</title>
+  <style>
+    *{box-sizing:border-box;font-family:Inter,Arial,Helvetica,sans-serif}
+    body{margin:0;background:linear-gradient(135deg,#1a2980,#26d0ce);color:#fff;min-height:100vh}
+    .container{padding:12px;max-width:980px;margin:0 auto}
+
+    .main-card{background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.15);border-radius:16px;padding:20px;margin-top:10px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+    .title{font-size:42px;margin:10px 0 18px;font-weight:800;text-align:center;text-shadow:2px 2px 0 rgba(0,0,0,.25)}
+    .nickname-input{width:100%;padding:14px;border-radius:12px;border:2px solid rgba(255,255,255,.35);background:#fff;color:#000;font-size:16px;margin-bottom:14px}
+    .menu-buttons{display:flex;flex-direction:column;gap:12px}
+    .btn{padding:14px 16px;border:none;border-radius:12px;font-size:18px;color:#fff;background:linear-gradient(45deg,#3498db,#2980b9);box-shadow:0 6px 16px rgba(0,0,0,.25);cursor:pointer}
+    .btn:hover{filter:brightness(1.03);transform:translateY(-2px)}
+    .btn.secondary{background:linear-gradient(45deg,#7f8c8d,#636e72)}
+    .btn.success{background:linear-gradient(45deg,#2ecc71,#27ae60)}
+    .btn.danger{background:linear-gradient(45deg,#e74c3c,#c0392b)}
+    .btn.small{font-size:14px;padding:10px 12px;border-radius:10px}
+    .status-badge{padding:6px 10px;border-radius:999px;font-size:12px;background:rgba(255,255,255,.15)}
+    .status-badge.ok{background:rgba(46,204,113,.25)}
+    .status-badge.err{background:rgba(231,76,60,.35)}
+    .player-bar{display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.08);border-radius:12px;padding:10px 14px;margin-bottom:10px}
+    .player-name{font-weight:800}
+
+    .qr-area{margin-top:10px;text-align:center}
+    .qr-box{background:#fff;border-radius:12px;padding:10px;display:inline-block}
+    .qr-small{font-size:12px;opacity:.9;margin-top:6px}
+    #reader{width:300px;margin:10px auto}
+    #offerText{width:100%;height:90px;margin-top:8px;border-radius:8px;border:1px solid #ccc;padding:6px;color:#000;display:none}
+    #copyOfferBtn{margin-top:6px;padding:10px;border:0;border-radius:8px;background:#2ecc71;color:#fff;cursor:pointer;width:100%;display:none}
+
+    .screen{display:none}
+    .game-header{display:flex;gap:8px;justify-content:space-between;align-items:center;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:10px 14px;margin:10px 0}
+    .left-head{display:flex;align-items:center;gap:8px}
+    .chat-toggle{padding:8px 12px;border-radius:999px;border:0;background:#34495e;color:#fff;cursor:pointer;position:relative}
+    .chat-toggle.notify::after{content:'';position:absolute;top:-2px;right:-2px;width:12px;height:12px;background:#ff3b30;border-radius:50%;box-shadow:0 0 8px rgba(255,59,48,.9)}
+    .boards{display:flex;flex-direction:column;gap:12px;margin:10px 0}
+    @media(min-width:720px){.boards{flex-direction:row;justify-content:space-between}}
+    .board-wrap{flex:1;min-width:300px}
+    .board-title{text-align:center;font-size:20px;font-weight:800;margin:6px 0 10px;text-shadow:1px 1px 0 rgba(0,0,0,.35)}
+    .board{display:grid;grid-template-columns:repeat(10,1fr);grid-template-rows:repeat(10,1fr);gap:3px;aspect-ratio:1/1;background:rgba(255,255,255,.06);border:2px solid rgba(255,255,255,.2);border-radius:12px;padding:6px;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+    .cell{background:rgba(52,152,219,.5);border-radius:6px;position:relative;cursor:pointer;transition:transform .08s ease;touch-action:manipulation;user-select:none}
+    .cell:active{transform:scale(.98)}
+    .cell.ship{background:rgba(44,62,80,.9)}
+    .cell.miss{background:rgba(236,240,241,.85)}
+    .cell.hit{background:rgba(231,76,60,.85)}
+    .cell.bomb{background:rgba(241,196,15,.45)}
+    .cell::after{content:'';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))}
+    .cell.miss::after{content:'•';color:#2c3e50;font-size:20px}
+    .cell.hit::after{content:'💥';font-size:26px}
+    .cell.bomb::after{content:'💣';font-size:22px}
+    .cell.sunk::after{content:'✖';font-size:26px;color:#ff2d2d}
+    .status-message{margin:10px 0;padding:12px;border-radius:12px;background:rgba(255,255,255,.14);text-align:center;font-weight:700;min-height:48px}
+
+    .controls{display:flex;gap:10px;flex-wrap:wrap}
+    .spacer{flex:1}
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50}
+    .modal.show{display:flex}
+    .modal-card{background:#fff;color:#333;border-radius:16px;max-width:420px;width:92%;padding:18px;text-align:center;box-shadow:0 12px 36px rgba(0,0,0,.35);animation:pop .12s ease}
+    @keyframes pop{from{transform:scale(.96);opacity:.6}to{transform:scale(1);opacity:1}}
+    .modal-card h2{margin:6px 0 6px}
+    .modal-card button{margin-top:10px;padding:12px 16px;border:0;border-radius:12px;background:#3498db;color:#fff;font-weight:700;width:100%}
+
+    /* Chat */
+    .chat-modal .modal-card{max-width:520px}
+    .chat-list{height:320px;overflow-y:auto;border:1px solid #eaeaea;border-radius:12px;padding:10px;background:#fafafa}
+    .msg{display:flex;margin:8px 0}
+    .msg.me{justify-content:flex-end}
+    .bubble{max-width:70%;padding:10px 12px;border-radius:14px;background:#ecf0f1}
+    .msg.me .bubble{background:#d1f5d3}
+    .msg .meta{font-size:11px;color:#666;margin-top:4px}
+    .chat-input{display:flex;gap:8px;margin-top:10px}
+    .chat-input input{flex:1;padding:10px;border-radius:10px;border:1px solid #ccc}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js">
+async function confirmJoinByCode(){
+  const inp = document.getElementById('joinCodeInput');
+  const code = (inp && inp.value ? inp.value.trim().toUpperCase() : '').replace(/[^A-Z0-9]/g,'');
+  if(!code){ alert('Введите код'); return; }
+  ROOM_ID = code;
+  try{
+    wsEnsureConnected();
+    await wsWhenOpen();
+    wsSend({ type:"join", roomId: ROOM_ID });
+    await setupRTC(false);
+    roomModal.classList.remove('show');
+    setBadge('Ожидаем оффер...', null);
+  }catch(e){ setBadge('Ошибка присоединения: '+e.message, 'err'); alert('Не удалось присоединиться: '+e.message); }
+}
+
+</script>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript">
+async function confirmJoinByCode(){
+  const inp = document.getElementById('joinCodeInput');
+  const code = (inp && inp.value ? inp.value.trim().toUpperCase() : '').replace(/[^A-Z0-9]/g,'');
+  if(!code){ alert('Введите код'); return; }
+  ROOM_ID = code;
+  try{
+    wsEnsureConnected();
+    await wsWhenOpen();
+    wsSend({ type:"join", roomId: ROOM_ID });
+    await setupRTC(false);
+    roomModal.classList.remove('show');
+    setBadge('Ожидаем оффер...', null);
+  }catch(e){ setBadge('Ошибка присоединения: '+e.message, 'err'); alert('Не удалось присоединиться: '+e.message); }
+}
+
+</script>
+</head>
+<body>
+  <div class="container">
+    <div id="menu" class="main-card">
+      <div class="player-bar">
+        <div class="player-name" id="menuPlayer">Игрок</div>
+        <div id="connBadge" class="status-badge">Не подключено</div>
+      </div>
+      <div class="title">Морской бой</div>
+      <input id="nick" class="nickname-input" placeholder="Введите ваш ник" maxlength="15"/>
+      <div class="menu-buttons">
+        <button id="aiBtn" class="btn">Против ИИ</button>
+        <button id="hostBtn" class="btn">Создать игру (QR)</button>
+        <button id="joinBtn" class="btn">Присоединиться (QR)</button>
+      </div>
+
+      <div id="qrArea" class="qr-area" style="display:none">
+        <div class="qr-box"><canvas id="qrCanvas"></canvas></div>
+        <div id="qrHint" class="qr-small"></div>
+        <textarea id="offerText" readonly></textarea>
+        <button id="copyOfferBtn">Скопировать текст</button>
+        <div id="reader" style="display:none"></div>
+        <div id="pasteArea" style="display:none;margin-top:8px;">
+          <div class="qr-small">Если неудобно сканировать камерой — вставьте текст сюда:</div>
+          <textarea id="pasteInput" placeholder="Текст от друга"></textarea>
+          <button id="pasteAcceptBtn" class="btn small" style="margin-top:6px;">Принять</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="setup" class="screen">
+      <div class="game-header">
+        <div class="left-head">
+          <div class="player-name" id="setupPlayer">Игрок</div>
+        </div>
+        <div>
+          <button id="cancelSetup" class="btn small danger">Отмена</button>
+        </div>
+      </div>
+      <div class="board-wrap">
+        <div class="board-title">Ваше поле</div>
+        <div id="setupBoard" class="board"></div>
+      </div>
+      <div id="setupMsg" class="status-message">Расставьте ваши корабли<br>Осталось: 1x4, 2x3, 3x2, 4x1</div>
+      <div class="controls">
+        <button id="rotateBtn" class="btn secondary">Повернуть ↔️</button>
+        <button id="randomBtn" class="btn secondary">Авторасстановка 🔀</button>
+        <div class="spacer"></div>
+        <button id="readyBtn" class="btn success" disabled>Готово</button>
+      </div>
+    </div>
+
+    <div id="game" class="screen">
+      <div class="game-header">
+        <div class="left-head">
+          <div class="player-name" id="gamePlayer">Игрок</div>
+          <div class="status-badge" id="turnBadge">—</div>
+        </div>
+        <div>
+          <button id="chatToggle" class="chat-toggle">💬 Чат</button>
+          <button id="newGameBtn" class="btn small secondary">Новая игра</button>
+          <button id="surrBtn" class="btn small danger">Сдаться</button>
+        </div>
+      </div>
+      <div class="boards">
+        <div class="board-wrap">
+          <div class="board-title">Ваше поле</div>
+          <div id="playerBoard" class="board"></div>
+        </div>
+        <div class="board-wrap">
+          <div id="enemyTitle" class="board-title">Поле противника</div>
+          <div id="enemyBoard" class="board"></div>
+        </div>
+      </div>
+      <div id="gameMsg" class="status-message">Ваш ход!</div>
+    </div>
+  </div>
+
+  <div id="resultModal" class="modal">
+    <div class="modal-card">
+      <h2 id="resTitle">Результат</h2>
+      <p id="resText">Игра окончена.</p>
+      <button id="againBtn">Новая игра</button>
+      <button id="menuBtn">В меню</button>
+    </div>
+  </div>
+
+  <div id="chatModal" class="modal chat-modal">
+    <div class="modal-card">
+      <h2>Чат</h2>
+      <div id="chatList" class="chat-list"></div>
+      <div class="chat-input">
+        <input id="chatInput" placeholder="Сообщение..." />
+        <button id="chatSend" class="btn small">Отправить</button>
+      </div>
+      <button id="chatClose" class="btn small secondary" style="margin-top:12px;">Закрыть</button>
+    </div>
+  </div>
+
+<script>
+
+// === WebSocket Signaling (Render) + красивые модалки комнаты ===
+const SIGNAL_URL = "wss://YOUR_RENDER_URL_HERE"; // ← ЗАМЕНИ на адрес Render (wss://your-app.onrender.com)
+let WS = null;
+let ROOM_ID = null;
+let wsReadyResolvers = [];
+
+function wsEnsureConnected(){
+  if(WS && (WS.readyState===0 || WS.readyState===1)) return;
+  WS = new WebSocket(SIGNAL_URL);
+  WS.onopen = ()=>{ wsReadyResolvers.forEach(r=>r()); wsReadyResolvers=[]; };
+  WS.onmessage = (e)=>{
+    try{
+      const data = JSON.parse(e.data);
+      if(data.type==="room-created"){
+        ROOM_ID = data.roomId;
+        openCreateRoomModal(ROOM_ID);
+        // Если мы уже подготовили RTC и есть локальное SDP, пошлём оффер заново
+        if(S.pc && S.pc.localDescription){
+          wsSend({ type:"signal", roomId: ROOM_ID, payload:{ kind:"offer", sdp: S.pc.localDescription } });
+        }
+      } else if(data.type==="room-joined"){
+        ROOM_ID = data.roomId;
+        setBadge('Комната ' + ROOM_ID + ': ожидаем оффер...', null);
+      } else if(data.type==="opponent-joined"){
+        setBadge('Соперник подключился', 'ok');
+      } else if(data.type==="error"){
+        alert(data.message || "Ошибка сервера");
+        setBadge('Ошибка комнаты', 'err');
+      } else if(data.type==="signal"){
+        onSignalMessage(data.payload);
+      }
+    }catch(err){ console.log("WS parse err", err); }
+  };
+  WS.onclose = ()=>{};
+  WS.onerror = ()=>{};
+}
+
+function wsWhenOpen(){ return new Promise(res=>{
+  if(WS && WS.readyState===1) return res();
+  wsReadyResolvers.push(res);
+}); }
+
+function wsSend(obj){
+  wsEnsureConnected();
+  if(WS.readyState===1){ WS.send(JSON.stringify(obj)); }
+  else { wsWhenOpen().then(()=> WS.send(JSON.stringify(obj))); }
+}
+
+// Модалки
+const roomModal = document.getElementById('roomModal');
+const roomModalTitle = document.getElementById('roomModalTitle');
+const roomModalBody = document.getElementById('roomModalBody');
+const roomModalClose = document.getElementById('roomModalClose');
+if(roomModalClose){ roomModalClose.onclick = ()=> roomModal.classList.remove('show'); }
+
+function openCreateRoomModal(code){
+  roomModalTitle.textContent = "Код комнаты";
+  roomModalBody.innerHTML = `
+    <div style="font-size:26px;font-weight:800;color:#004080;letter-spacing:1px">${code}</div>
+    <div style="margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+      <button class="btn small" onclick="copyRoomCode()">📋 Скопировать</button>
+      <button class="btn small" onclick="shareRoomCode()">📤 Поделиться</button>
+    </div>
+  `;
+  roomModal.classList.add('show');
+}
+
+function openJoinRoomModal(){
+  roomModalTitle.textContent = "Введите код комнаты";
+  roomModalBody.innerHTML = `
+    <input id="joinCodeInput" placeholder="Например: AB12CD" style="text-transform:uppercase">
+    <button class="btn" style="margin-top:10px" onclick="confirmJoinByCode()">Присоединиться</button>
+  `;
+  roomModal.classList.add('show');
+}
+
+function copyRoomCode(){
+  if(!ROOM_ID){ alert("Код ещё не создан"); return; }
+  navigator.clipboard.writeText(ROOM_ID).then(()=> alert("Код скопирован: " + ROOM_ID))
+    .catch(()=> alert("Скопируйте вручную: " + ROOM_ID));
+}
+
+function shareRoomCode(){
+  if(!ROOM_ID){ alert("Код ещё не создан"); return; }
+  const text = "Морской бой — мой код комнаты: " + ROOM_ID;
+  if(navigator.share){ navigator.share({ title:"Морской бой", text }); }
+  else { prompt("Скопируйте и отправьте другу:", text); }
+}
+
+// Получение сигналов от сервера
+async function onSignalMessage(payload){
+  if(!payload || !S.pc) return;
+  if(payload.kind === "offer"){
+    try{
+      await S.pc.setRemoteDescription(payload.sdp);
+      const answer = await S.pc.createAnswer();
+      await S.pc.setLocalDescription(answer);
+      await waitIce(S.pc);
+      wsSend({ type:"signal", roomId: ROOM_ID, payload:{ kind:"answer", sdp: S.pc.localDescription } });
+      setBadge('Отправлен ответ', 'ok');
+    }catch(e){ setBadge('Ошибка оффера: '+e.message, 'err'); }
+  }
+  else if(payload.kind === "answer"){
+    try{
+      await S.pc.setRemoteDescription(payload.sdp);
+      setBadge('Получен ответ', 'ok');
+    }catch(e){ setBadge('Ошибка ответа: '+e.message, 'err'); }
+  }
+  else if(payload.kind === "candidate"){
+    try{
+      await S.pc.addIceCandidate(payload.candidate);
+    }catch(e){ console.log("ICE add error", e); }
+  }
+}
+
+// Переопределяем действия на кнопки: QR убираем, используем сигнальный сервер
+
+const S = {
+  name:'Игрок',
+  shipTypes:[{size:4,count:1,placed:0},{size:3,count:2,placed:0},{size:2,count:3,placed:0},{size:1,count:4,placed:0}],
+  shipHorizontal:true, currentShip:null,
+  playerBoard:Array(10).fill().map(()=>Array(10).fill(0)),
+  enemyBoard:Array(10).fill().map(()=>Array(10).fill(0)),
+  playerShips:[], enemyShips:[], // enemyShips используется только vs AI
+  mode:null, started:false, myTurn:true,
+  pc:null, dc:null, isHost:false, peerReady:false, meReady:false,
+  chat:[]
+};
+
+// UI refs
+const menu = document.getElementById('menu');
+const setup = document.getElementById('setup');
+const game = document.getElementById('game');
+const nick = document.getElementById('nick');
+const menuPlayer = document.getElementById('menuPlayer');
+const setupPlayer = document.getElementById('setupPlayer');
+const gamePlayer = document.getElementById('gamePlayer');
+const connBadge = document.getElementById('connBadge');
+const turnBadge = document.getElementById('turnBadge');
+const aiBtn = document.getElementById('aiBtn');
+const hostBtn = document.getElementById('hostBtn');
+const joinBtn = document.getElementById('joinBtn');
+const setupBoard = document.getElementById('setupBoard');
+const setupMsg = document.getElementById('setupMsg');
+const rotateBtn = document.getElementById('rotateBtn');
+const randomBtn = document.getElementById('randomBtn');
+const readyBtn = document.getElementById('readyBtn');
+const cancelSetup = document.getElementById('cancelSetup');
+const playerBoardEl = document.getElementById('playerBoard');
+const enemyBoardEl = document.getElementById('enemyBoard');
+const enemyTitle = document.getElementById('enemyTitle');
+const gameMsg = document.getElementById('gameMsg');
+const surrBtn = document.getElementById('surrBtn');
+const newGameBtn = document.getElementById('newGameBtn');
+const resultModal = document.getElementById('resultModal');
+const resTitle = document.getElementById('resTitle');
+const resText = document.getElementById('resText');
+const againBtn = document.getElementById('againBtn');
+const menuBtn = document.getElementById('menuBtn');
+
+// QR UI
+const qrArea = document.getElementById('qrArea');
+const qrCanvas = document.getElementById('qrCanvas');
+const qrHint = document.getElementById('qrHint');
+const reader = document.getElementById('reader');
+const pasteArea = document.getElementById('pasteArea');
+const pasteInput = document.getElementById('pasteInput');
+const pasteAcceptBtn = document.getElementById('pasteAcceptBtn');
+const offerText = document.getElementById('offerText');
+const copyOfferBtn = document.getElementById('copyOfferBtn');
+let html5QrCode=null;
+
+// Chat UI
+const chatModal = document.getElementById('chatModal');
+const chatToggle = document.getElementById('chatToggle');
+const chatList = document.getElementById('chatList');
+const chatInput = document.getElementById('chatInput');
+const chatSend = document.getElementById('chatSend');
+const chatClose = document.getElementById('chatClose');
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadName();
+  updateNames();
+  nick.addEventListener('input', onNick);
+  aiBtn.addEventListener('click', ()=>startGame('ai'));
+  hostBtn.addEventListener('click', hostGame);
+  joinBtn.addEventListener('click', joinGame);
+  rotateBtn.addEventListener('click', ()=>S.shipHorizontal = !S.shipHorizontal);
+  randomBtn.addEventListener('click', placeRandomShips);
+  readyBtn.addEventListener('click', finishSetup);
+  cancelSetup.addEventListener('click', backToMenu);
+  surrBtn.addEventListener('click', surrender);
+  newGameBtn.addEventListener('click', newGame);
+  againBtn.addEventListener('click', newGame);
+  menuBtn.addEventListener('click', backToMenu);
+
+  chatToggle.addEventListener('click', ()=> { chatModal.classList.add('show'); chatToggle.classList.remove('notify'); });
+  chatClose.addEventListener('click', ()=> chatModal.classList.remove('show'));
+  chatSend.addEventListener('click', sendChat);
+  chatInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); sendChat(); } });
+});
+
+function onNick(){ S.name = nick.value.trim() || 'Игрок'; saveName(); updateNames(); }
+function loadName(){ const v = localStorage.getItem('seaBattleName'); if(v) S.name=v; nick.value=S.name; }
+function saveName(){ localStorage.setItem('seaBattleName', S.name); }
+function updateNames(){ menuPlayer.textContent=S.name; setupPlayer.textContent=S.name; gamePlayer.textContent=S.name; }
+
+function setBadge(text, cls){
+  connBadge.textContent=text;
+  connBadge.classList.remove('ok','err');
+  if(cls) connBadge.classList.add(cls);
+}
+
+// SCREENS
+function show(el){ menu.style.display='none'; setup.style.display='none'; game.style.display='none'; el.style.display='block'; }
+function resetBoardsState(){
+  S.playerBoard=Array(10).fill().map(()=>Array(10).fill(0));
+  S.enemyBoard=Array(10).fill().map(()=>Array(10).fill(0));
+  S.playerShips=[]; S.enemyShips=[];
+  S.shipTypes.forEach(s=>s.placed=0);
+  S.currentShip=null; S.shipHorizontal=true;
+  S.started=false; S.myTurn=true;
+}
+
+// SETUP
+function startGame(mode){
+  S.mode=mode; resetBoardsState();
+  show(setup);
+  setupBoard.innerHTML='';
+  for(let y=0;y<10;y++)for(let x=0;x<10;x++){
+    const c=document.createElement('div'); c.className='cell';
+    c.addEventListener('click',()=>placeShip(x,y));
+    setupBoard.appendChild(c);
+  }
+  updateSetupMsg();
+}
+function updateSetupMsg(){
+  const left = S.shipTypes.map(s=>`${s.count-s.placed}x${s.size}`).filter(t=>!t.startsWith('0x')).join(', ');
+  if(left){ setupMsg.innerHTML=`Расставьте ваши корабли<br>Осталось: ${left}`; readyBtn.disabled=true; }
+  else { setupMsg.innerHTML='Все корабли расставлены!<br>Нажмите "Готово"'; readyBtn.disabled=false; }
+}
+function canPlace(x,y,size,h){
+  for(let i=0;i<size;i++){
+    const cx=h?x+i:x, cy=h?y:y+i; if(cx>=10||cy>=10) return false;
+    for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){
+      const nx=cx+dx, ny=cy+dy;
+      if(nx>=0&&nx<10&&ny>=0&&ny<10){ if(S.playerBoard[ny][nx]===1) return false; }
+    }
+  }
+  return true;
+}
+function placeShipOnBoard(x,y,size,h,board,el,collect){
+  const shipCells=[];
+  for(let i=0;i<size;i++){
+    const cx=h?x+i:x, cy=h?y:y+i;
+    board[cy][cx]=1;
+    shipCells.push({x:cx,y:cy});
+    el.children[cy*10+cx].classList.add('ship');
+  }
+  collect.push({size,cells:shipCells,hits:0,sunk:false});
+}
+function placeShip(x,y){
+  if(!S.currentShip){ for(const t of S.shipTypes){ if(t.placed<t.count){ S.currentShip={size:t.size}; break; } } }
+  if(!S.currentShip) return;
+  const s=S.currentShip.size;
+  if(canPlace(x,y,s,S.shipHorizontal)){
+    placeShipOnBoard(x,y,s,S.shipHorizontal,S.playerBoard,setupBoard,S.playerShips);
+    S.shipTypes.find(t=>t.size===s).placed++;
+    S.currentShip=null; updateSetupMsg();
+  }
+}
+function placeRandomShips(){
+  resetBoardsState();
+  setupBoard.innerHTML='';
+  for(let y=0;y<10;y++)for(let x=0;x<10;x++){
+    const c=document.createElement('div'); c.className='cell';
+    c.addEventListener('click',()=>placeShip(x,y)); setupBoard.appendChild(c);
+  }
+  for(const t of S.shipTypes){
+    for(let i=0;i<t.count;i++){
+      let ok=false;
+      while(!ok){
+        const x=Math.floor(Math.random()*10), y=Math.floor(Math.random()*10), h=Math.random()>0.5;
+        if(canPlace(x,y,t.size,h)){ placeShipOnBoard(x,y,t.size,h,S.playerBoard,setupBoard,S.playerShips); t.placed++; ok=true; }
+      }
+    }
+  }
+  updateSetupMsg();
+}
+
+function finishSetup(){
+  for(const t of S.shipTypes){ if(t.placed<t.count){ setupMsg.textContent='Разместите все корабли!'; return; } }
+  // switch to game screen
+  show(game);
+  playerBoardEl.innerHTML=''; enemyBoardEl.innerHTML='';
+  for(let y=0;y<10;y++)for(let x=0;x<10;x++){
+    const pc=document.createElement('div'); pc.className='cell'; if(S.playerBoard[y][x]===1) pc.classList.add('ship'); playerBoardEl.appendChild(pc);
+    const ec=document.createElement('div'); ec.className='cell'; ec.addEventListener('click',()=>shoot(x,y)); enemyBoardEl.appendChild(ec);
+  }
+  if(S.mode==='ai'){
+    enemyTitle.textContent='Поле ИИ';
+    generateAIShips(); S.started=true; S.myTurn=true; updateTurnUI();
+  } else {
+    enemyTitle.textContent='Поле противника';
+    sendRTC({type:'READY'}); S.meReady=true; gameMsg.textContent='Ожидание соперника...';
+    // Если я хост и соперник уже готов, запускаем бой (фиксация первой партии)
+    if(S.isHost && S.peerReady){ hostStartBattle(); }
+  }
+}
+
+// GAME CORE
+function updateTurnUI(){
+  turnBadge.textContent = S.myTurn ? 'Ваш ход' : 'Ход соперника';
+}
+function generateAIShips(){
+  S.enemyBoard=Array(10).fill().map(()=>Array(10).fill(0)); S.enemyShips=[];
+  const types=[{size:4,count:1},{size:3,count:2},{size:2,count:3},{size:1,count:4}];
+  for(const t of types){
+    for(let i=0;i<t.count;i++){
+      let ok=false;
+      while(!ok){
+        const x=Math.floor(Math.random()*10), y=Math.floor(Math.random()*10), h=Math.random()>0.5;
+        if(canPlaceGeneric(S.enemyBoard,x,y,t.size,h)){ placeShipGeneric(S.enemyBoard,S.enemyShips,x,y,t.size,h); ok=true; }
+      }
+    }
+  }
+}
+function canPlaceGeneric(board,x,y,size,h){
+  for(let i=0;i<size;i++){
+    const cx=h?x+i:x, cy=h?y:y+i; if(cx>=10||cy>=10) return false;
+    for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){
+      const nx=cx+dx, ny=cy+dy; if(nx>=0&&nx<10&&ny>=0&&ny<10){ if(board[ny][nx]===1) return false; }
+    }
+  } return true;
+}
+function placeShipGeneric(board,arr,x,y,size,h){
+  const cells=[]; for(let i=0;i<size;i++){ const cx=h?x+i:x, cy=h?y:y+i; board[cy][cx]=1; cells.push({x:cx,y:cy}); }
+  arr.push({size,cells,hits:0,sunk:false});
+}
+
+function shoot(x,y){
+  if(!S.started || !S.myTurn) return;
+  const v = S.enemyBoard[y][x];
+  if(v>=2){ gameMsg.textContent='Сюда уже стреляли'; return; }
+  if(S.mode==='ai'){
+    // Local resolution vs AI
+    let hit=false, sunk=false, sunkShip=null;
+    for(const ship of S.enemyShips){
+      for(const c of ship.cells){ if(c.x===x&&c.y===y){ hit=true; ship.hits++; if(ship.hits===ship.size){ sunk=true; ship.sunk=true; sunkShip=ship; markBombsAroundCells(S.enemyBoard, ship.cells); } break; } }
+      if(hit) break;
+    }
+    S.enemyBoard[y][x]=hit?3:2; refreshEnemyBoard();
+    if(sunk) refreshEnemyBoard();
+    if(allSunk(S.enemyShips)){ showVictory('Вы победили ИИ!'); return; }
+    if(hit){ gameMsg.textContent='Попадание! Стреляйте ещё.'; }
+    else { S.myTurn=false; updateTurnUI(); gameMsg.textContent='Промах. Ход ИИ...'; setTimeout(aiMove,600); }
+  } else {
+    // P2P — отправляем ход и ждём результат
+    sendRTC({type:'MOVE', x, y});
+    S.myTurn=false; updateTurnUI();
+    gameMsg.textContent='Выстрел отправлен, ждём ответ...';
+  }
+}
+function markBombsAroundCells(board,cells){
+  for(const c of cells){
+    for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){
+      const nx=c.x+dx, ny=c.y+dy;
+      if(nx>=0&&nx<10&&ny>=0&&ny<10){ if(board[ny][nx]===0) board[ny][nx]=4; }
+    }
+  }
+}
+function refreshEnemyBoard(){
+  const cells = enemyBoardEl.querySelectorAll('.cell');
+  for(let y=0;y<10;y++)for(let x=0;x<10;x++){
+    const i=y*10+x, v=S.enemyBoard[y][x]; cells[i].className='cell';
+    if(v===2) cells[i].classList.add('miss');
+    if(v===3) cells[i].classList.add('hit');
+    if(v===4) cells[i].classList.add('bomb');
+  }
+}
+function refreshPlayerBoard(){
+  const cells = playerBoardEl.querySelectorAll('.cell');
+  for(let y=0;y<10;y++)for(let x=0;x<10;x++){
+    const i=y*10+x, v=S.playerBoard[y][x];
+    cells[i].className='cell' + (S.playerBoard[y][x]===1?' ship':'');
+    if(v===2) cells[i].classList.add('miss');
+    if(v===3) cells[i].classList.add('hit');
+    if(v===4) cells[i].classList.add('bomb');
+  }
+  for(const ship of S.playerShips){ if(ship.sunk){ for(const c of ship.cells){ cells[c.y*10+c.x].classList.add('sunk'); } } }
+}
+function aiMove(){
+  const options=[]; for(let yy=0;yy<10;yy++)for(let xx=0;xx<10;xx++) if(S.playerBoard[yy][xx]<2) options.push({x:xx,y:yy});
+  const t=options[Math.floor(Math.random()*options.length)], x=t.x, y=t.y;
+  let hit=false, sunk=false, sunkShip=null;
+  for(const ship of S.playerShips){
+    for(const c of ship.cells){ if(c.x===x&&c.y===y){ hit=true; ship.hits++; if(ship.hits===ship.size){ sunk=true; ship.sunk=true; markBombsAroundCells(S.playerBoard, ship.cells); } break; } }
+    if(hit) break;
+  }
+  S.playerBoard[y][x]=hit?3:2; refreshPlayerBoard();
+  if(allSunk(S.playerShips)){ showDefeat('ИИ потопил все ваши корабли'); return; }
+  if(hit){ setTimeout(aiMove,500); }
+  else { S.myTurn=true; updateTurnUI(); gameMsg.textContent='Противник промахнулся. Ваш ход!'; }
+}
+function allSunk(ships){ return ships.length>0 && ships.every(s=>s.sunk); }
+
+// RESULT/Victory UI
+function showVictory(text){ resTitle.textContent='ПОБЕДА!'; resText.textContent=text||'Отличная работа!'; resultModal.classList.add('show'); }
+function showDefeat(text){ resTitle.textContent='ПОРАЖЕНИЕ'; resText.textContent=text||'В следующий раз повезёт!'; resultModal.classList.add('show'); }
+function closeResult(){ resultModal.classList.remove('show'); }
+function newGame(){
+  closeResult();
+  chatToggle.classList.remove('notify');
+  if(S.mode==='p2p'){ sendRTC({type:'NEW_GAME'}); }
+  startGame(S.mode==='ai'?'ai':'p2p');
+}
+
+// P2P
+async function hostGame(){
+  S.isHost = true;
+  try{
+    wsEnsureConnected();
+    await wsWhenOpen();
+    wsSend({ type:"create" });
+    await setupRTC(true);
+    const offer = await S.pc.createOffer();
+    await S.pc.setLocalDescription(offer);
+    await waitIce(S.pc);
+    // оффер отправим как только придёт room-created (там повторная отсылка), но если ROOM_ID уже есть — пошлём сразу
+    if(ROOM_ID){
+      wsSend({ type:"signal", roomId: ROOM_ID, payload:{ kind:"offer", sdp: S.pc.localDescription } });
+    }
+    setBadge('Комната создаётся...', null);
+  }catch(e){ setBadge('Ошибка создания комнаты: '+e.message, 'err'); alert('Не удалось создать комнату: '+e.message); }
+}
+async function joinGame(){
+  S.isHost = false;
+  openJoinRoomModal();
+}
+async function setupRTC(isHost){
+
+  S.pc = new RTCPeerConnection({
+    iceServers:[
+      {urls:"stun:stun.l.google.com:19302"},
+      {urls:"stun:stun1.l.google.com:19302"},
+      {urls:"stun:stun2.l.google.com:19302"},
+      {urls:"stun:stun3.l.google.com:19302"}
+    ]
+  });
+  
+  // Отправка ICE-кандидатов через сигнальный сервер
+  S.pc.onicecandidate = (e)=>{
+    if(e && e.candidate && ROOM_ID){
+      wsSend({ type:"signal", roomId: ROOM_ID, payload:{ kind:"candidate", candidate: e.candidate } });
+    }
+  };
+if(isHost){ S.dc=S.pc.createDataChannel('game'); bindDC(S.dc); }
+  else { S.pc.ondatachannel = (e)=> bindDC(e.channel); }
+  S.pc.onconnectionstatechange = ()=>{
+    const s=S.pc.connectionState;
+    if(s==='connected'){ setBadge('Соединение установлено','ok'); }
+    else if(s==='failed'){ setBadge('Соединение не удалось','err'); }
+    else if(s==='disconnected'){ setBadge('Отключено','err'); }
+    else if(s==='connecting'){ setBadge('Подключение...',null); }
+  };
+  qrArea.style.display='block'; window.scrollTo({top:0,behavior:'smooth'});
+}
+function bindDC(dc){
+  S.dc=dc;
+  dc.onopen = ()=>{ setBadge('Канал открыт','ok'); hideQR(); if(S.isHost){ sendRTC({type:'ENTER_SETUP'}); startGame('p2p'); } };
+  dc.onclose=()=> setBadge('Канал закрыт','err');
+  dc.onerror=(e)=> setBadge('Ошибка канала: '+(e&&e.message?e.message:''),'err');
+  dc.onmessage=(e)=> onRTC(JSON.parse(e.data));
+}
+function sendRTC(obj){ if(S.dc && S.dc.readyState==='open'){ S.dc.send(JSON.stringify(obj)); } }
+function onRTC(msg){
+  if(msg.type==='ENTER_SETUP'){ startGame('p2p'); }
+  else if(msg.type==='READY'){
+    S.peerReady=true;
+    if(S.isHost && S.meReady){ hostStartBattle(); }
+  }
+  else if(msg.type==='START'){
+    // Хост сообщает, что пора начинать
+    S.mode='p2p'; S.started=true;
+    const iAm = S.isHost ? 'host' : 'guest';
+    S.myTurn = (msg.first === iAm);
+    updateTurnUI();
+    gameMsg.textContent = S.myTurn ? 'Ваш ход!' : 'Ход соперника...';
+  }
+  else if(msg.type==='MOVE'){
+    // Opponent shoots at our board -> resolve and send RESULT back
+    const {x,y} = msg;
+    let hit=false, sunk=false, sunkCells=null;
+    for(const ship of S.playerShips){
+      for(const c of ship.cells){ if(c.x===x&&c.y===y){ hit=true; ship.hits++; if(ship.hits===ship.size){ ship.sunk=true; sunk=true; sunkCells=ship.cells; markBombsAroundCells(S.playerBoard, ship.cells); } break; } }
+      if(hit) break;
+    }
+    S.playerBoard[y][x]=hit?3:2; refreshPlayerBoard();
+    const defeat = allSunk(S.playerShips);
+    sendRTC({type:'RESULT', x, y, hit, sunk, sunkCells, defeat, bombs: collectBombsAround(sunkCells)});
+    if(defeat){ showDefeat('Ваш флот потоплен'); }
+    else {
+      // if miss -> our turn; if hit -> opponent shoots again
+      if(!hit){ S.myTurn=true; updateTurnUI(); gameMsg.textContent='Противник промахнулся. Ваш ход!'; }
+      else { gameMsg.textContent='По вам попали. Ход соперника...'; }
+    }
+  }
+  else if(msg.type==='RESULT'){
+    const {x,y,hit,sunk,sunkCells,defeat,bombs}=msg;
+    S.enemyBoard[y][x]=hit?3:2;
+    if(sunk && sunkCells){ markBombsAroundCells(S.enemyBoard, sunkCells); }
+    if(bombs && Array.isArray(bombs)){ for(const b of bombs){ if(S.enemyBoard[b.y][b.x]===0) S.enemyBoard[b.y][b.x]=4; } }
+    refreshEnemyBoard();
+    if(defeat){ showVictory('Вы потопили все корабли противника!'); return; }
+    if(hit){ gameMsg.textContent='Попадание! Стреляйте ещё.'; S.myTurn=true; updateTurnUI(); }
+    else { gameMsg.textContent='Промах. Ход соперника...'; S.myTurn=false; updateTurnUI(); }
+  }
+  else if(msg.type==='DEFEAT'){ showVictory('Противник признал поражение'); }
+  else if(msg.type==='SURRENDER'){ showVictory('Противник сдался!'); }
+  else if(msg.type==='NEW_GAME'){ startGame('p2p'); }
+  else if(msg.type==='CHAT'){ addChat(false, msg.text); if(!chatModal.classList.contains('show')) chatToggle.classList.add('notify'); }
+}
+function hostStartBattle(){
+  // Запуск боя решает только хост: сообщает, кто ходит первый
+  sendRTC({type:'START', first:'host'});
+  S.mode='p2p'; S.started=true; S.myTurn = true; // хост ходит первым
+  updateTurnUI();
+  gameMsg.textContent='Ваш ход!';
+}
+function startP2PBattle(){
+  // Больше не вызывается напрямую: старт теперь через START от хоста
+  S.mode='p2p'; S.started=true; S.myTurn = S.isHost;
+  updateTurnUI();
+  gameMsg.textContent = S.myTurn ? 'Ваш ход!' : 'Ход соперника...';
+}
+function collectBombsAround(cells){
+  if(!cells) return [];
+  const out=[];
+  for(const c of cells){
+    for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){
+      const nx=c.x+dx, ny=c.y+dy;
+      if(nx>=0&&nx<10&&ny>=0&&ny<10) out.push({x:nx,y:ny});
+    }
+  } return out;
+}
+
+// Chat
+function addChat(isMe,text){
+  const time = new Date().toLocaleTimeString().slice(0,5);
+  const wrap=document.createElement('div'); wrap.className='msg'+(isMe?' me':'');
+  const bubble=document.createElement('div'); bubble.className='bubble';
+  const p=document.createElement('div'); p.textContent=text;
+  const meta=document.createElement('div'); meta.className='meta'; meta.textContent=time+(isMe?' · вы':'');
+  bubble.appendChild(p); bubble.appendChild(meta); wrap.appendChild(bubble);
+  chatList.appendChild(wrap); chatList.scrollTop=chatList.scrollHeight;
+}
+function sendChat(){
+  const t=chatInput.value.trim(); if(!t) return;
+  chatInput.value=''; addChat(true,t); sendRTC({type:'CHAT', text:t});
+}
+
+// QR helpers
+function showQR(text){
+  reader.style.display='none';
+  pasteArea.style.display='block';
+  offerText.style.display='block';
+  offerText.value=text;
+  copyOfferBtn.style.display='block';
+  copyOfferBtn.onclick = ()=>{
+    navigator.clipboard.writeText(offerText.value).catch(()=>{ try{ offerText.select(); document.execCommand('copy'); }catch(_){ } });
+  };
+  try{ QRCode.toCanvas(qrCanvas, text, {width:260}); }catch(e){}
+  qrHint.style.display='block';
+}
+function hideQR(){ qrArea.style.display='none'; html5Stop(); }
+function html5Stop(){ if(html5QrCode){ html5QrCode.stop().catch(()=>{}); html5QrCode.clear(); html5QrCode=null; } }
+
+function backToMenu(){
+  closeResult(); chatModal.classList.remove('show');
+  if(S.pc){ try{S.pc.close();}catch(e){} }
+  S.pc=null; S.dc=null; html5Stop();
+  setBadge('Не подключено',null);
+  qrArea.style.display='none'; offerText.style.display='none'; copyOfferBtn.style.display='none'; pasteArea.style.display='none';
+  show(menu);
+  chatToggle.classList.remove('notify');
+}
+
+function surrender(){ if(S.mode==='p2p') sendRTC({type:'SURRENDER'}); showDefeat('Вы сдались'); }
+
+function waitIce(pc){ return new Promise((res)=>{
+  if(pc.iceGatheringState==='complete'){ res(); return; }
+  function check(){ if(pc.iceGatheringState==='complete'){ pc.removeEventListener('icegatheringstatechange',check); res(); } }
+  pc.addEventListener('icegatheringstatechange',check); setTimeout(()=>{ pc.removeEventListener('icegatheringstatechange',check); res(); },7000);
+}); }
+
+async function confirmJoinByCode(){
+  const inp = document.getElementById('joinCodeInput');
+  const code = (inp && inp.value ? inp.value.trim().toUpperCase() : '').replace(/[^A-Z0-9]/g,'');
+  if(!code){ alert('Введите код'); return; }
+  ROOM_ID = code;
+  try{
+    wsEnsureConnected();
+    await wsWhenOpen();
+    wsSend({ type:"join", roomId: ROOM_ID });
+    await setupRTC(false);
+    roomModal.classList.remove('show');
+    setBadge('Ожидаем оффер...', null);
+  }catch(e){ setBadge('Ошибка присоединения: '+e.message, 'err'); alert('Не удалось присоединиться: '+e.message); }
+}
+
+</script>
+
+  <!-- Модалка комнаты (создание/ввод кода) -->
+  <div id="roomModal" class="modal">
+    <div class="modal-card">
+      <h2 id="roomModalTitle">Комната</h2>
+      <div id="roomModalBody" style="margin:10px 0;"></div>
+      <button id="roomModalClose" class="btn small secondary">Закрыть</button>
+    </div>
+  </div>
+
+</body>
+</html>
